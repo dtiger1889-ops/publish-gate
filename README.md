@@ -19,7 +19,7 @@ Every check runs over the publish set (the files in the git index, which is exac
 | `email` | Email addresses in file contents, other than example domains and noreply addresses. |
 | `private-ip` | Private network addresses. A warning by default, since docs often mention them on purpose. |
 | `internal-host` | Domains you list as internal. |
-| `image-gps` | Location metadata in photos and videos. Built in: EXIF GPS in JPEG, PNG and TIFF, and XMP location text in any of them. With [exiftool](https://exiftool.org/) installed every photo and video format is read in full. Without it, a HEIC, WebP, RAW or video file makes the run UNVERIFIABLE (set `media_without_exiftool` to `warn` to accept that). |
+| `image-gps` | Location metadata in photos and videos. Built in: EXIF GPS in JPEG, PNG and TIFF, and uncompressed XMP location text in any of them (a PNG can store XMP compressed, which only exiftool reads). With [exiftool](https://exiftool.org/) installed every photo and video format is read in full. Without it, a HEIC, WebP, RAW or video file makes the run UNVERIFIABLE (set `media_without_exiftool` to `warn` to accept that). |
 | `large-file` | Files over the size limit, including ones deleted long ago that still sit in history. |
 | `forbidden-file` | `.env`, key files, password databases, SQLite databases, logs, OS junk. |
 | `notebook-output` | Jupyter notebooks that still carry cell outputs. |
