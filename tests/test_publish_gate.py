@@ -334,6 +334,26 @@ class GateTest(unittest.TestCase):
         self.assertEqual(code, pg.EXIT_FINDINGS, out)
         self.assertIn("A.js", out)
 
+    def test_geo_tag_names(self):
+        for tag in ("GPS:GPSLatitude", "XMP-iptcExt:LocationCreatedCity", "XMP-photoshop:City",
+                    "XMP-iptcCore:Location", "IPTC:Sub-location"):
+            self.assertTrue(pg.GEO_TAG_RE.match(tag.rsplit(":", 1)[-1]), tag)
+        for tag in ("ExifIFD:SubjectLocation", "XMP-x:Opacity", "MakerNotes:BatteryCapacity"):
+            self.assertFalse(pg.GEO_TAG_RE.match(tag.rsplit(":", 1)[-1]), tag)
+
+    @unittest.skipUnless(pg.gitleaks_version() and pg.gitleaks_version() >= pg.GITLEAKS_MIN, "needs gitleaks")
+    def test_generated_export_name_cannot_overwrite_a_real_path(self):
+        token = "npm_" + "k3x9q2m7v4b8n1c5z6l0p2r8t4w7y1u3h5j9"
+        h = lambda body: subprocess.run(["git", "-C", str(self.repo), "hash-object", "-w", "--stdin"],
+                                        input=body, capture_output=True, text=True).stdout.strip()
+        bad, ok = h(f'const t = "{token}";\n'), h("clean\n")
+        sh(self.repo, "add", "README.md", "LICENSE")
+        for sha, path in ((ok, "A.js"), (bad, "_collision/1/a.js"), (ok, "a.js")):
+            sh(self.repo, "update-index", "--add", "--cacheinfo", f"100644,{sha},{path}")
+        code, out = self.run_gate("check")
+        self.assertEqual(code, pg.EXIT_FINDINGS, out)
+        self.assertIn("_collision/1/a.js", out)
+
     def test_selftest_passes(self):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(pg.main(["selftest"]), pg.EXIT_CLEAN)

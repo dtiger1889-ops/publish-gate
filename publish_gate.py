@@ -98,7 +98,8 @@ CONFLICT_RE = re.compile(r"(?: \(\d+\)| - Copy(?: \(\d+\))?|\.orig)(?:\.[^/]*)?$
 BUILTIN_GPS_EXT = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 MEDIA_EXT = BUILTIN_GPS_EXT | {".heic", ".heif", ".webp", ".avif", ".gif", ".dng", ".cr2", ".cr3",
                                ".nef", ".arw", ".orf", ".rw2", ".mov", ".mp4", ".m4v", ".3gp"}
-LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"
+GEO_TAG_RE = re.compile(r"(?i)^(gps|location(created|shown)?|city|sub-?location)")
+LFS_POINTER =b"version https://git-lfs.github.com/spec/v1"
 CANARY = "publish-gate-canary-7f3a"
 
 
@@ -716,8 +717,9 @@ def check_media(cfg: dict, media: list, report: Report) -> None:
             where, path = names[name]
             if any("error" in k.lower() for k in row):
                 report.unverifiable.append(f"exiftool could not read {path}")
-            # GPS tags plus written-out places (XMP LocationCreated/LocationShown, City, Sub-location)
-            if any(re.search(r"gps|location|city", k, re.I) for k in row):
+            # GPS tags plus written-out places (XMP LocationCreated/LocationShown, City, Sub-location), matched on
+            # the tag name's start so pixel tags such as SubjectLocation do not count
+            if any(GEO_TAG_RE.match(k.rsplit(":", 1)[-1]) for k in row):
                 add(cfg, report, Finding("image-gps", where, f"{path} carries GPS location metadata", path=path))
         if proc.returncode != 0:
             report.unverifiable.append(f"exiftool exited {proc.returncode}: "
@@ -779,8 +781,10 @@ def run_check(repo: Path, cfg: dict, denylist: list, report: Report, since: str 
             if where == "publish set" and use_gitleaks:
                 # raw index bytes, never a checkout: smudge filters and sparse checkouts must not change what is scanned
                 # A.txt and a.txt are two files to git but one file on a case-insensitive disk: never overwrite
-                rel = path if path.lower() not in export_map["lower"] else \
-                    f"_collision/{len(export_map['paths'])}/{path.rsplit('/', 1)[-1]}"
+                rel, n = path, 0
+                while rel.lower() in export_map["lower"]:  # a generated name can collide too: keep counting
+                    n += 1
+                    rel = f"_collision/{n}/{path.rsplit('/', 1)[-1]}"
                 export_map["lower"].add(rel.lower())
                 export_map["paths"][rel] = path
                 try:
