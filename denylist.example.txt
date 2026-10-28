@@ -1,0 +1,11 @@
+# publish-gate denylist format. Do NOT keep your real list in a repo.
+# Default location: ~/.publish-gate/denylist.txt (or set PUBLISH_GATE_DENYLIST).
+#
+# One entry per line. Matched case-insensitively anywhere in a line of any
+# published file, file name, commit message or author name.
+# Lines starting with # are ignored.
+#
+# Worth listing: your full name and its variants, usernames and handles,
+# street and town, workplace, the names of people in your life,
+# private project codenames, account numbers, anything a stranger could
+# use to find or identify you or someone else.

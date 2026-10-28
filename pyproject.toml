@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "publish-gate"
+version = "1.0.0"
+description = "Screen a git repo for personal data and secrets before it goes public, then publish it in one locked run"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+
+[project.scripts]
+publish-gate = "publish_gate:main"
+
+[tool.setuptools]
+py-modules = ["publish_gate"]

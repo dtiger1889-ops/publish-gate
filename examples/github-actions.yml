@@ -1,0 +1,32 @@
+# Copy to .github/workflows/publish-gate.yml.
+# Store your denylist (one entry per line) as a repository secret named
+# PUBLISH_GATE_DENYLIST under Settings > Secrets and variables > Actions.
+# Runs on push only: a pull_request run checks out a test merge commit that
+# GitHub writes under its own address, which the identity check would flag.
+name: publish-gate
+on: [push]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar -xz -C /usr/local/bin gitleaks
+      - name: Write the denylist outside the checkout
+        env:
+          DENYLIST: ${{ secrets.PUBLISH_GATE_DENYLIST }}
+        run: |
+          mkdir -p "$HOME/.publish-gate"
+          printf '%s\n' "$DENYLIST" > "$HOME/.publish-gate/denylist.txt"
+      - name: Check
+        run: |
+          pip install git+https://github.com/dtiger1889-ops/publish-gate
+          publish-gate check --full-history

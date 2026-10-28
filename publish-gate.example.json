@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy to .publish-gate.json in your repo root. Every key is optional; delete the ones you do not change. Lists start empty: fill them with your own values. Never put personal words here; they go in the denylist outside the repo.",
+  "allowed_commit_emails": ["*@users.noreply.github.com"],
+  "internal_domains": [],
+  "max_file_mb": 5,
+  "require_gitleaks": false,
+  "expected_visibility": null,
+  "severity": {"private-ip": "warn"},
+  "allow": []
+}
