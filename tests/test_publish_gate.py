@@ -308,6 +308,32 @@ class GateTest(unittest.TestCase):
         code, out = self.run_gate("publish", "--paths", "README.md", "-m", "x", "--branch", "main")
         self.assertEqual(code, pg.EXIT_REFUSED, out)
 
+    # --- regressions from the third audit ---
+
+    def test_preview_url_with_bad_port_rejected(self):
+        tags = "".join(f'<meta property="{t}" content="https://a.example:invalid/">' for t in
+                       ("og:title", "og:description", "og:url", "og:image"))
+        self.write("index.html", f'<html><head>{tags}<meta name="twitter:card" content="summary">'
+                   "</head></html>\n")
+        sh(self.repo, "add", "-A")
+        code, out = self.run_gate("check")
+        self.assertEqual(code, pg.EXIT_FINDINGS, out)
+        self.assertIn("real host", out)
+
+    @unittest.skipUnless(pg.gitleaks_version() and pg.gitleaks_version() >= pg.GITLEAKS_MIN, "needs gitleaks")
+    def test_case_colliding_paths_both_reach_gitleaks(self):
+        token = "npm_" + "k3x9q2m7v4b8n1c5z6l0p2r8t4w7y1u3h5j9"
+        bad = subprocess.run(["git", "-C", str(self.repo), "hash-object", "-w", "--stdin"],
+                             input=f'const t = "{token}";\n', capture_output=True, text=True).stdout.strip()
+        ok = subprocess.run(["git", "-C", str(self.repo), "hash-object", "-w", "--stdin"],
+                            input="clean\n", capture_output=True, text=True).stdout.strip()
+        sh(self.repo, "add", "README.md", "LICENSE")
+        sh(self.repo, "update-index", "--add", "--cacheinfo", f"100644,{bad},A.js")
+        sh(self.repo, "update-index", "--add", "--cacheinfo", f"100644,{ok},a.js")
+        code, out = self.run_gate("check")
+        self.assertEqual(code, pg.EXIT_FINDINGS, out)
+        self.assertIn("A.js", out)
+
     def test_selftest_passes(self):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(pg.main(["selftest"]), pg.EXIT_CLEAN)

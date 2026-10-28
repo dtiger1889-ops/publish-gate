@@ -31,6 +31,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from urllib.parse import urlsplit
 from pathlib import Path
 
 VERSION = "1.0.0"
@@ -512,6 +513,15 @@ class MetaTags(HTMLParser):
                 self.tags[key.strip().lower()] = (a.get("content") or "").strip()
 
 
+def absolute_url(value: str) -> bool:
+    try:
+        u = urlsplit(value)
+        u.port  # raises ValueError on a malformed port
+    except ValueError:
+        return False
+    return u.scheme in ("http", "https") and bool(u.hostname) and "." in u.hostname and " " not in value
+
+
 def link_preview_problems(text: str, wanted: list) -> list:
     parser = MetaTags()
     parser.feed(text)
@@ -520,8 +530,8 @@ def link_preview_problems(text: str, wanted: list) -> list:
         value = parser.tags.get(tag.lower(), "")
         if not value:
             problems.append(f"{tag} missing or empty")
-        elif tag in ("og:image", "og:url") and not re.match(r"https?://[^/\s:]+\.[^/\s]+", value):
-            problems.append(f"{tag} must be an absolute URL")
+        elif tag in ("og:image", "og:url") and not absolute_url(value):
+            problems.append(f"{tag} must be an absolute http(s) URL with a real host")
         elif tag == "twitter:card" and value not in ("summary", "summary_large_image", "app", "player"):
             problems.append(f"twitter:card value '{value}' is not a card type")
     return problems
@@ -639,7 +649,8 @@ def run_gitleaks(cfg: dict, args: list, report: Report, where: str, line_of) -> 
                                      path=path, line=line))
 
 
-def gitleaks_dir(cfg: dict, tree: Path, report: Report) -> None:
+def gitleaks_dir(cfg: dict, tree: Path, report: Report, names: dict) -> None:
+    """names maps each exported file back to its path in the repo."""
     def locate(leak):
         try:
             rel = Path(leak.get("File", "")).resolve().relative_to(tree.resolve()).as_posix()
@@ -650,7 +661,7 @@ def gitleaks_dir(cfg: dict, tree: Path, report: Report) -> None:
             leak["_line"] = lines[int(leak.get("StartLine", 1)) - 1]
         except (OSError, IndexError, ValueError):
             pass
-        return rel, ""
+        return names.get(rel, rel), ""
     run_gitleaks(cfg, ["dir", str(tree)], report, "publish set", locate)
 
 
@@ -705,7 +716,8 @@ def check_media(cfg: dict, media: list, report: Report) -> None:
             where, path = names[name]
             if any("error" in k.lower() for k in row):
                 report.unverifiable.append(f"exiftool could not read {path}")
-            if any("gps" in k.lower() for k in row):
+            # GPS tags plus written-out places (XMP LocationCreated/LocationShown, City, Sub-location)
+            if any(re.search(r"gps|location|city", k, re.I) for k in row):
                 add(cfg, report, Finding("image-gps", where, f"{path} carries GPS location metadata", path=path))
         if proc.returncode != 0:
             report.unverifiable.append(f"exiftool exited {proc.returncode}: "
@@ -744,6 +756,7 @@ def run_check(repo: Path, cfg: dict, denylist: list, report: Report, since: str 
     limit = int(float(cfg["max_file_mb"]) * 1024 * 1024)
     media = []
     export = Path(tempfile.mkdtemp(prefix="publish-gate-")) / "tree"
+    export_map = {"lower": set(), "paths": {}}
 
     def scan_entries(entries, where):
         got = read_blobs(repo, [s for _, s in entries], report, SCAN_CAP)
@@ -765,13 +778,19 @@ def run_check(repo: Path, cfg: dict, denylist: list, report: Report, since: str 
                 media.append((where, path, data))
             if where == "publish set" and use_gitleaks:
                 # raw index bytes, never a checkout: smudge filters and sparse checkouts must not change what is scanned
+                # A.txt and a.txt are two files to git but one file on a case-insensitive disk: never overwrite
+                rel = path if path.lower() not in export_map["lower"] else \
+                    f"_collision/{len(export_map['paths'])}/{path.rsplit('/', 1)[-1]}"
+                export_map["lower"].add(rel.lower())
+                export_map["paths"][rel] = path
                 try:
-                    out = export / path
+                    out = export / rel
                     out.parent.mkdir(parents=True, exist_ok=True)
                     out.write_bytes(data)
                 except (OSError, UnicodeEncodeError):
                     report.unverifiable.append(f"could not hand {path} to gitleaks (file name not usable here)")
 
+    scan_entries.export_map = export_map
     try:
         return _run_check_body(repo, cfg, denylist, report, since, tip, scan_index, extra_messages,
                                use_gitleaks, media, export, scan_entries)
@@ -815,7 +834,7 @@ def _run_check_body(repo, cfg, denylist, report, since, tip, scan_index, extra_m
             scan_line(cfg, denylist, "commit message", 0, line, "publish set", report)
 
     if scan_index and use_gitleaks and export.exists():
-        gitleaks_dir(cfg, export, report)
+        gitleaks_dir(cfg, export, report, scan_entries.export_map["paths"])
     check_media(cfg, media, report)
     return report
 
@@ -974,8 +993,10 @@ def publish_locked(repo: Path, cfg: dict, a, scopes: list) -> int:
     if has_change:
         git(repo, "commit", "--quiet", "-m", a.message)
     new_head = head_sha(repo)
-    parent = git_text(repo, "rev-parse", f"{new_head}^", check=False) if has_change and head else None
-    if git_text(repo, "rev-parse", "HEAD^{tree}") != staged_tree or (has_change and head and parent != head) \
+    # ALL parents, not just the first: a hook could add a merge parent carrying unchecked history
+    parents = git_text(repo, "rev-list", "--parents", "-n", "1", new_head).split()[1:]
+    expected_parents = [head] if head else []
+    if git_text(repo, "rev-parse", "HEAD^{tree}") != staged_tree or (has_change and parents != expected_parents) \
             or (not has_change and new_head != head):
         print("refused to push: HEAD is not the commit that was checked (a commit hook or another process "
               "changed it). Inspect it, then run the publish again.")
@@ -1138,7 +1159,7 @@ def cmd_selftest(_a) -> int:
                                                           for f in report.findings)))
         for label, ok in rows:
             print(f"  {'ok  ' if ok else 'MISS'} {label}")
-        problems = [u for u in report.unverifiable if "exiftool" not in u]
+        problems = list(report.unverifiable)
         for u in problems:
             print(f"  [UNVERIFIABLE] {u}")
         if not all(ok for _, ok in rows) or problems:
