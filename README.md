@@ -1,10 +1,42 @@
 # publish-gate
 
-A screen you run before a git repo goes public. It checks what git would actually publish, history included, for the things that leak: your name, your home folder, your personal email in commit metadata, API keys, photo location data, internal server addresses, files that should never leave your machine. Then it publishes the repo in one locked run that stops for you to read the diff before anything is pushed.
+A Python command-line tool for checking a git repository before publishing it. A repository is a project folder whose files and change history are tracked by git. Publish Gate checks the files and history you would share for personal data, secrets and other material that should stay private. Its separate publish command checks, stops for review, then commits and pushes the approved changes.
+
+Use it when you want to share a project without sharing your private information. You can run it yourself or have an AI agent run it. No AI account or skill is required.
 
 I built the first version of this for my own public repos after the token scan I was relying on called several of them clean when they were not. This is the general version, with the screens a larger codebase needs added on top of the ones I use.
 
 ![publish-gate stopping a publish on a denylisted name and a leaked key](assets/check.png)
+
+## Start here
+
+You need Python 3.9 or newer, git, and a local copy of the repository you want to check. A terminal is the app where you enter the commands below. GitHub login and permission to push are needed for publishing to GitHub, but not for a local check.
+
+1. Follow [Install](#install), including creating your private denylist: the words you want the tool to look for. Keep that list outside every repository and out of chat.
+2. Run `publish-gate selftest` after installing. It creates a temporary repository with deliberately unsafe content and checks that the tool catches it. A successful run exits with code 0.
+3. Open a terminal in the project folder you want to check and run:
+
+   ```
+   publish-gate check --full-history
+   ```
+
+This check does not commit, push or change the repository's visibility. It reads the staged files, the snapshot git would put in the next commit, plus all existing commit history. Unstaged edits and new untracked files are outside that snapshot. Stage the specific changes you intend to share before checking those changes; staging selects them locally and does not publish them.
+
+`CLEAN` means no blocking finding was detected in that scope. Read any warnings and coverage notes too. `[FINDING]` names something to resolve; `UNVERIFIABLE` means a check could not complete and is not a pass. A missing denylist is one cause. Deleting sensitive text from the current file does not remove it from older commits. A clean scan still needs your review for personal information the tool cannot recognize.
+
+For a later publish, follow [Use](#use). Publishing sends commits to the repository's configured remote, the server where git shares the project. The check above does not do that.
+
+## Using it with an AI agent
+
+The agent's job is to run this program and explain its findings. You do not need to turn the repository into a skill first. A skill, reusable instructions loaded by an agent, could be an optional way to remind it to use Publish Gate. This repo supplies the command-line program and a GitHub Actions workflow, not an installable agent skill or plugin.
+
+You can give an agent this request:
+
+```text
+Read https://github.com/dtiger1889-ops/publish-gate and help me check my project with it. Ask which local repository to check if that is not clear. Check the Python and git requirements, help me install the tool if needed, and help me create the denylist outside every repository without putting private entries in chat. Run its selftest, then run check --full-history in the target repository. Explain what was checked, what was excluded, any findings or warnings, and what I should do next. Do not stage or edit my project files, commit, push, change visibility, rewrite history or skip a failed check. If you cannot access the files or run the commands, explain what access is missing.
+```
+
+Agent use requires access to the local repository and a terminal that can run Python and git, with permission to run the check. A session that can only chat cannot execute these commands. There are no bundled integrations or verified compatibility claims for individual agent products; having the required capabilities is a prerequisite, not proof that every agent works with it.
 
 ## What it checks
 
@@ -88,7 +120,7 @@ It flags a branch that moved past the certified commit (something was pushed wit
 
 `publish-gate selftest` plants examples of the problems above in a throwaway repo (in current files, in a UTF-16 file, in a deleted file and in a commit's email) and confirms each check catches its own. With gitleaks installed it runs through gitleaks too. Run it after installing or upgrading.
 
-Exit codes: 0 clean, 1 findings, 2 a check could not run, 3 stopped for review, 4 refused, 5 push failed, 6 certify failed. Anything other than 0 means do not publish.
+Exit codes: 0 clean, 1 findings, 2 a check could not run, 3 stopped for review, 4 refused, 5 push failed, 6 certify failed. Anything other than 0 means do not publish. For help, [open an issue](https://github.com/dtiger1889-ops/publish-gate/issues) with the command, tool version and a redacted description. Do not attach your denylist or unredacted findings.
 
 ## Settings
 
