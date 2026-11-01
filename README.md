@@ -1,6 +1,6 @@
 # publish-gate
 
-A Python command-line tool for checking a git repository before publishing it. A repository is a project folder whose files and change history are tracked by git. Publish Gate checks the files and history you would share for personal data, secrets and other material that should stay private. Its separate publish command checks, stops for review, then commits and pushes the approved changes.
+A Python command-line tool for checking a git repository before publishing it. It scans the files and history you would share for personal data, secrets and other material that should stay private. Its separate publish command checks, stops for review, then commits and pushes the approved changes.
 
 Use it when you want to share a project without sharing your private information. You can run it yourself or have an AI agent run it. No AI account or skill is required.
 
@@ -10,7 +10,7 @@ I built the first version of this for my own public repos after the token scan I
 
 ## Start here
 
-You need Python 3.9 or newer, git, and a local copy of the repository you want to check. A terminal is the app where you enter the commands below. GitHub login and permission to push are needed for publishing to GitHub, but not for a local check.
+You need Python 3.9 or newer, git, and a local copy of the repository you want to check. GitHub login and permission to push are needed for publishing to GitHub, but not for a local check.
 
 1. Follow [Install](#install), including creating your private denylist: the words you want the tool to look for. Keep that list outside every repository and out of chat.
 2. Run `publish-gate selftest` after installing. It creates a temporary repository with deliberately unsafe content and checks that the tool catches it. A successful run exits with code 0.
@@ -20,15 +20,15 @@ You need Python 3.9 or newer, git, and a local copy of the repository you want t
    publish-gate check --full-history
    ```
 
-This check does not commit, push or change the repository's visibility. It reads the staged files, the snapshot git would put in the next commit, plus all existing commit history. Unstaged edits and new untracked files are outside that snapshot. Stage the specific changes you intend to share before checking those changes; staging selects them locally and does not publish them.
+This check does not commit, push or change the repository's visibility. It scans staged files and all existing commit history; unstaged edits and untracked files are excluded. Stage the specific changes you intend to share before checking them.
 
 `CLEAN` means no blocking finding was detected in that scope. Read any warnings and coverage notes too. `[FINDING]` names something to resolve; `UNVERIFIABLE` means a check could not complete and is not a pass. A missing denylist is one cause. Deleting sensitive text from the current file does not remove it from older commits. A clean scan still needs your review for personal information the tool cannot recognize.
 
-For a later publish, follow [Use](#use). Publishing sends commits to the repository's configured remote, the server where git shares the project. The check above does not do that.
+When you are ready to publish, follow [Use](#use).
 
 ## Using it with an AI agent
 
-The agent's job is to run this program and explain its findings. You do not need to turn the repository into a skill first. A skill, reusable instructions loaded by an agent, could be an optional way to remind it to use Publish Gate. This repo supplies the command-line program and a GitHub Actions workflow, not an installable agent skill or plugin.
+The agent runs this program and explains its findings. No skill is required; you can optionally create one to remind your agent to use Publish Gate. This repo supplies the command-line program and a GitHub Actions workflow, not an installable agent skill or plugin.
 
 You can give an agent this request:
 
